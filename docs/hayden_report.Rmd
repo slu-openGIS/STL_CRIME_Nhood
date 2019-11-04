@@ -1,0 +1,502 @@
+---
+title: "Crime in Hayden's Rectangle"
+author: "Christopher Prener, Ph.D."
+date: '`r format(Sys.time(), "%B %d, %Y")`'
+output: pdf_document
+urlcolor: blue
+---
+
+```{r load-packages, echo=FALSE, message=FALSE}
+# tidyverse packages
+library(dplyr)
+library(ggplot2)
+library(forcats)
+library(readr)
+library(tidyr)
+
+# spatial packages
+library(compstatr)
+library(gateway)
+library(leaflet)
+library(sf)
+
+# table packages
+library(janitor)
+library(kableExtra)
+
+# other packages
+library(here)
+
+# functions
+source(here("source", "cp_sequoiaTheme.R"))
+```
+
+```{r load-data, echo=FALSE, message=FALSE, results='hide'}
+# city and regional crime data
+city <- read_csv(here("data", "city", "city_wide.csv")) %>%
+  mutate(region = "City of St. Louis")
+region <- read_csv(here("data", "region", "region.csv"))
+
+# detailed crime data
+part1_2017 <- read_csv(here("data", "crimes", "part1_2017.csv"))
+part1_2018 <- read_csv(here("data", "crimes", "part1_2018.csv"))
+part1_2019 <- read_csv(here("data", "crimes", "part1_2019.csv"))
+
+# hayden's rectangle
+hayden <- st_read(here("data", "raw", "haydenPolygon")) %>%
+  st_transform(crs = 4326)
+
+# regions
+region_sf <- st_read(here("data", "raw", "haydenRegions"), 
+                     stringsAsFactors = FALSE) %>%
+  st_transform(crs = 4326)
+```
+
+```{r centroids, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+# regions
+region_sf %>%
+  st_transform(crs = 26915) %>%
+  select(-ID, -Shape_Leng, -Shape_Area) %>%
+  st_centroid() %>%
+  gw_get_coords() -> region_centroid
+
+st_geometry(region_centroid) <- NULL
+
+region_centroid %>% 
+  mutate(x = ifelse(NAME == "South", x-.01, x)) %>%
+  mutate(x = ifelse(NAME == "North NonHayden", x+.02, x)) %>%
+  mutate(y = ifelse(NAME == "North NonHayden", y+.01, y)) %>%
+  mutate(NAME = ifelse(NAME == "North NonHayden", "North Non-Hayden", NAME)) -> region_centroid
+
+region_centroid %>% 
+  filter(NAME == "Forest Park") %>%
+  mutate(NAME = "North Non-Hayden") %>%
+  mutate(y = y + .025) -> region_new # %>%
+  # mutate(x = x - .01) 
+
+region_centroid <- bind_rows(region_centroid, region_new)
+
+rm(region_new)
+```
+
+
+## Background
+In June 2018, St. Louis Metropolitan Police Department (SLMPD) Chief John Hayden was interviewed by St. Louis Public Radio reporter Rachel Lippmann. In the [resulting article](https://news.stlpublicradio.org/post/after-18-months-haydens-rectangle-shows-promise-reducing-violent-crime), he repeated a statistic that has been used in the past to justify the current "hotspot" policing effort in North City:
+
+> “At the time, 64% of the violent crime citywide came from that area, and so I knew that it was safe to focus there because I knew that there was a lot of low-hanging fruit with respect to violent crime in that region,” Hayden said. “It was basically a lot more visibility, and a lot more enforcement.”
+
+[Reporting by KMOV](https://www.kmov.com/news/st-louis-neighborhoods-taking-unconventional-approach-to-combat-crime/article_77507664-580b-11e9-97da-930254b6f81c.html) used the same logic in April 2019:
+
+> "'Hayden's Rectangle' is a portion of north St. Louis where 67 percent of the city's violent crime occurs. Chief John Hayden made that area, from Goodfellow to Vandeventer and north of MLK Boulevard, a priority to stop violent crime."
+
+This so-called "Hayden's Rectangle" area covers a large swath of North St. Louis City. It has typically been described as being bounded by Goodfellow Ave. on the west, Dr. Martin Luther King Dr. on the south, N. Vandeventer on the east, and W. Florrisant Ave. on the north:
+
+```{r map-hayden, echo = FALSE, dpi=300}
+hayden %>%
+  leaflet(options = leafletOptions(zoomControl = FALSE)) %>%
+  addProviderTiles(providers$Esri.NatGeoWorldMap,
+                   options = providerTileOptions(minZoom = 14, maxZoom = 14)) %>%
+  addPolygons(label = "Hayden's Rectangle",
+              labelOptions = labelOptions(noHide = TRUE, 
+                                          direction = 'center', 
+                                          textOnly = TRUE, 
+                                          style = list(
+                                                  "font-style" = "italic",
+                                                  "font-size" = "28px")))
+```
+
+## Data and Methods
+### Crime Data
+Crime data for the City of St. Louis are publicly available on [SLMPD's website](https://www.slmpd.org/crime_stats.shtml). Using the `R` package [`compstatr`](https://slu-opengis.github.io/compstatr/), I downloaded crime data for 2017, 2018, and 2019. These data were cleaned so that only Part 1 crimes (which the [FBI defines](https://www.ucrdatatool.gov/offenses.cfm) as homicides, rapes, aggravated assaults, robberies, burglaries, larceny, larceny of a motor vehicle, and arson) were retained and crimes with a `count` of `-1` were removed. 
+
+Crimes missing a latitude and longitude value were also geocoded, and these coordinates were then used to locate each crime within Hayden's Rectangle or another large region of the city:
+
+```{r map-regions, echo = FALSE, dpi=300}
+region_sf %>%
+  leaflet(height = "2150px", options = leafletOptions(zoomControl = FALSE)) %>%
+  addProviderTiles(providers$CartoDB.Positron,
+                   options = providerTileOptions(minZoom = 13, maxZoom = 13)) %>%
+  addPolygons() %>%
+  addLabelOnlyMarkers(data = region_centroid,
+                    lng = ~x, lat = ~y, label = ~NAME,
+                    labelOptions = labelOptions(noHide = TRUE, direction = 'center', 
+                                                textOnly = TRUE, 
+                                                style = list(
+                                                  "font-style" = "italic",
+                                                  "font-size" = "28px")))
+```
+
+Aside from Hayden's Rectangle, these regions are fabricated from underlying neighborhoods. They are purely hypothetical constructs that are meant solely to create reference groups for comparison with the Hayden's Rectangle region in North St. Louis City. 
+
+### Population Data
+To calculate crime rates, population counts were accessed via the U.S. Census Bureau's API (via the [`tidycensus`](https://walkerke.github.io/tidycensus/) package). The 2013-2017 five year American Community Survey estimates for Census tracts were used. These were [interpolated](https://slu-opengis.github.io/areal/articles/areal.html) (using the [`areal`](https://slu-opengis.github.io/areal/)), which is a statistical process for estimating population values for overlapping but incongruent features, such as from Census tracts to the regions shown on the previous page. 
+
+### Open Data
+All data cleaning and geocoding operations were completed using `R` and are fully reproducible. All data and code for data set construction and generating this report can be found on [Github.com](https://github.com/chris-prener/STL_CRIME_Nhood).
+
+## Crime by Region in 2017
+The central justification for "hotspot" policing in Hayden's Rectangle is that a large portion of crimes occurred there in 2017. However, the homicide data reveal that, while a majority of homicides in 2017 did indeed occur in North City, more actually occurred *outside* of Hayden's Rectangle that within it:
+
+```{r, homicide-table-2017, echo=FALSE}
+cs_filter_crime(part1_2017, var = crime, crime = "Homicide") %>%
+  mutate(
+    region = ifelse(region == "North NonHayden", "North, Non-Hayden", region),
+    region = ifelse(region == "North Hayden", "North, Hayden", region)
+  ) %>%
+  tabyl(region) %>%
+  adorn_totals("row") %>%
+  adorn_pct_formatting(digits = 2) %>%
+  rename(
+    Region = region,
+    Count = n,
+    Percent = percent,
+    `Valid Percent` = valid_percent
+  ) %>%
+  knitr::kable(caption = "2017 Homicides by Region",
+               align = c("l", "r", "r", "r"), linesep = "",
+               format = "latex", booktabs = TRUE) %>%
+  row_spec(0, bold = TRUE) %>%
+  kable_styling(latex_options = "hold_position", full_width = TRUE)
+```
+
+The same pattern holds for violent crimes (homicides, rapes, aggravated assaults, and robberies):
+
+```{r, violent-table-2017, echo=FALSE}
+cs_filter_crime(part1_2017, var = crime, crime = "Violent") %>%
+  mutate(
+    region = ifelse(region == "North NonHayden", "North, Non-Hayden", region),
+    region = ifelse(region == "North Hayden", "North, Hayden", region)
+  ) %>%
+  tabyl(region) %>%
+  adorn_totals("row") %>%
+  adorn_pct_formatting(digits = 2) %>%
+  rename(
+    Region = region,
+    Count = n,
+    Percent = percent,
+    `Valid Percent` = valid_percent
+  ) %>%
+  knitr::kable(caption = "2017 Violent Crimes by Region",
+               align = c("l", "r", "r", "r"), linesep = "",
+               format = "latex", booktabs = TRUE) %>%
+  row_spec(0, bold = TRUE) %>%
+  kable_styling(latex_options = "hold_position", full_width = TRUE)
+```
+
+\newpage
+When crimes against property (burglaries, larceny, larceny of a motor vehicle, and arson) are added to the violent crimes, the pattern continues to hold. Taken together, violent crimes and crimes against property are referred to as "Part 1" crimes:
+
+```{r, part1-table-2017, echo=FALSE}
+cs_filter_crime(part1_2017, var = crime, crime = "Part 1") %>%
+  mutate(
+    region = ifelse(region == "North NonHayden", "North, Non-Hayden", region),
+    region = ifelse(region == "North Hayden", "North, Hayden", region)
+  ) %>%
+  tabyl(region) %>%
+  adorn_totals("row") %>%
+  adorn_pct_formatting(digits = 2) %>%
+  rename(
+    Region = region,
+    Count = n,
+    Percent = percent,
+    `Valid Percent` = valid_percent
+  ) %>%
+  knitr::kable(caption = "2017 Part 1 Crimes by Region",
+               align = c("l", "r", "r", "r"), linesep = "",
+               digits = 2, format = "latex", booktabs = TRUE) %>%
+  row_spec(0, bold = TRUE) %>%
+  kable_styling(latex_options = "hold_position", full_width = TRUE)
+```
+
+The trends in these three tables are summarized visually below. These tables and the figure below all underscore the idea that the primary logic behind Hayden's Rectangle does not align with the crime data for the city. The area covered by Hayden's Rectangle had, in 2017, no more than a third of the homicide, twenty percent of violent crimes, and just below fifteen percent of Part 1 crimes. The area of North St. Louis City *outside* of Hayden's Rectangle has a larger share of the city's homicides, violent crimes, and Part 1 crimes.
+
+```{r, plot-2017, echo = FALSE}
+cs_filter_crime(part1_2017, var = crime, crime = "Homicide") %>%
+  tabyl(region) %>%
+  mutate(value = "Homicides") -> homicide_sum
+
+cs_filter_crime(part1_2017, var = crime, crime = "Violent") %>%
+  tabyl(region) %>%
+  mutate(value = "Violent Crimes") -> violent_sum
+
+cs_filter_crime(part1_2017, var = crime, crime = "Part 1") %>%
+  tabyl(region) %>%
+  mutate(value = "Part 1 Crimes") -> p1_sum
+
+bind_rows(homicide_sum, violent_sum) %>%
+  bind_rows(., p1_sum) %>%
+  filter(is.na(region) == FALSE) %>%
+  select(value, region, percent) %>%
+  mutate(
+    percent = percent * 100,
+    region = ifelse(region == "North NonHayden", "North, Non-Hayden", region),
+    region = ifelse(region == "North Hayden", "North, Hayden", region),
+    value = fct_relevel(as.factor(value), "Homicides", "Violent Crimes")
+  ) %>%
+  ggplot(mapping = aes(fill = value, y = percent, x = region)) + 
+    geom_bar(position="dodge", stat="identity") +
+    scale_y_continuous(limits=c(0, 50), breaks = seq(0, 50, 5)) +
+    scale_fill_brewer(palette = "Set1", name = "Crime Type") +
+    labs(
+      title = "Percent of Total Crimes by Region, 2017",
+      x = "",
+      y = "Percent"
+    ) +
+  cp_sequoiaTheme(background = "white", base_size = 12, legend_size = .5) +
+  theme(axis.text.x=element_text(angle=25, hjust=1))
+```
+
+## Changes After 2017
+In order to trace the impact of "hotspot" enforcement in Hayden's Rectangle, we can follow changes in crime rates. For each of these analyses, the rate per 1,000 estimated residents will be used. This is the standard for measuring and comparing crime between entities that have varying population sizes. Since 2019 is not a complete year, data from 2017 and 2018 are included only for the number of months that match data included 2019 (through the end of September). 
+
+### Homicides
+During the first nine months of "hotspot" policing in Hayden's Rectangle, the homicide rate dropped by `r paste0(round(abs((1.34-1.46)/1.46)*100, digits = 2), "%")` (from 1.46 homicides per 1,000 residents to 1.34) relative to the same nine month period in 2019. Two important caveats exist with this drop. however. First, homicides in the city as a whole were down `r paste0(round(abs((.46-.53)/.53)*100, digits = 2), "%")` in the first nine months of 2018 compared to the same period in 2017 (from .53 homicides per 1,000 residents to .46). Second, the homicide rate in the first nine months of 2019 rebounded `r paste0(round(abs((1.6-1.46)/1.46)*100, digits = 2), "%")` over the same period in 2017 (from 1.46 homicide per 1,000 residents to 1.60). This came despite a `r paste0(round(abs((.52-.53)/.53)*100, digits = 2), "%")` overall decline in homicides when comparing the first nine months of 2017 to the same period in 2019. 
+
+Interestingly, homicides in North City *outside* of Hayden's Rectangle fell by a greater rate between the first nine months of 2017 and 2018 (`r paste0(round(abs((.95-1.45)/1.45)*100, digits = 2), "%")` from 1.45 homicides per 1,000 to .95). The homicide rate here has remained below its 2017 highs through the first nine months of 2019. 
+
+The rise in homicides in 2019 relative to 2017 that occurred in Hayden's Rectangle is seen in only one other group of neighborhoods, those in the Southeast part of the city. This increase has occurred despite "hotspot" policing in the Dutchtown neighborhood of this region.
+
+```{r, regional-homicide-change, echo=FALSE}
+region %>%
+  filter(range == "partial" & type == "homicide") %>%
+  filter(is.na(region) == FALSE) %>%
+  select(year, region, rate) %>%
+  mutate(
+    region = ifelse(region == "North NonHayden", "North, Non-Hayden", region),
+    region = ifelse(region == "North Hayden", "North, Hayden", region)
+  ) %>%
+  pivot_wider(names_from = year, values_from = rate) %>%
+  mutate(`2018` = ifelse(is.na(`2018`) == TRUE, 0, `2018`)) %>%
+  mutate(
+    `2017` = round(`2017`, digits = 2),
+    `2018` = round(`2018`, digits = 2),
+    `2019` = round(`2019`, digits = 2)
+  ) %>%
+  mutate(
+    `2018` = cell_spec(`2018`, "latex", color = ifelse(`2018` > `2017`, "red", "black"),
+                            bold = ifelse(`2018` > `2017`, TRUE, FALSE)),
+    `2019` = cell_spec(`2019`, "latex", color = ifelse(`2019` > `2017`, "red", "black"),
+                            bold = ifelse(`2019` > `2017`, TRUE, FALSE))
+  ) %>%
+  rename(
+    Region = region,
+  ) %>%
+  knitr::kable(caption = "Changes in Regional Homicide Rates (per 1,000 residents)",
+               align = c("l", "r", "r", "r"), linesep = "",
+               format = "latex", booktabs = TRUE, escape = FALSE) %>%
+  row_spec(0, bold = TRUE) %>%
+  kable_styling(latex_options = "hold_position", full_width = TRUE) %>%
+  footnote(alphabet = c("Data for each year cover the January 1 through September 30 period.", 
+                        "Red values represent increases from 2017."))
+```
+
+```{r city-homicide-change, echo=FALSE}
+city %>%
+  filter(range == "partial" & type == "homicide") %>%
+  mutate(region = "City of St. Louis") %>%
+  select(year, region, rate) %>%
+  pivot_wider(names_from = year, values_from = rate) %>%
+  rename(
+    ` ` = region,
+  ) %>%
+  knitr::kable(caption = "Changes in City-wide Homicide Rates (per 1,000 residents)",
+               digits = 2, format = "latex", booktabs = TRUE) %>%
+  row_spec(0, bold = TRUE) %>%
+  kable_styling(latex_options = "hold_position", full_width = TRUE) %>%
+  footnote(alphabet = c("Data for each year cover the January 1 through September 30 period."))
+```
+
+```{r, plot-homicides, echo = FALSE}
+bind_rows(region, city) %>%
+  filter(range == "partial" & type == "homicide") %>%
+  filter(region %in% c("North Hayden", "North NonHayden", "City of St. Louis")) %>%
+  mutate(region = case_when(
+    region == "North Hayden" ~ "North, Hayden",
+    region == "North NonHayden" ~ "North, Non-Hayden",
+    region == "City of St. Louis" ~ "City of St. Louis"
+  )) %>%
+  ggplot(mapping = aes(fill=as.character(year), y = rate, x = region)) + 
+    geom_bar(position="dodge", stat="identity") +
+    scale_y_continuous(limits=c(0, 1.75), breaks = seq(0, 1.75, .25)) +
+    scale_fill_brewer(palette = "Set1", name = "Year") +
+    labs(
+      title = "Homicides, Rate per 1000 Residents",
+      subtitle = "January-September only",
+      x = "",
+      y = "Homicide Rate"
+    ) +
+    cp_sequoiaTheme(background = "white", base_size = 12, legend_size = .5) +
+    theme(axis.text.x=element_text(angle=10, hjust=1))
+```
+
+\newpage
+### Violent Crimes
+Violent crimes, which include rapes, aggravated assaults, and robberies, also dropped in the first nine months of 2018 in Hayden's Rectangle (`r paste0(round(abs((23.96-27.73)/27.73)*100, digits = 2), "%")` from 27.73 crimes per 1,000 to 23.96). However, in first nine months 2019, the violent crime rate was up and above its 2017 levels (`r paste0(round(abs((28.33-27.73)/27.73)*100, digits = 2), "%")` from 27.73 crimes per 1,000 to 28.33). These increases are occurring despite the city-wide violent crime rate, while it has risen from the first nine months of 2018 to 2019, remaining below its 2017 highs.
+
+Critically, violent crime rates are also up in the Midtown region of neighborhoods in the first nine months of 2018 and 2019. This suggests that the "hotspot" efforts in Hayden's Rectangle may have "displaced" crime into adjacent neighborhoods like Grand Center. 
+
+```{r, regional-violent-change, echo=FALSE}
+region %>%
+  filter(range == "partial" & type == "violent") %>%
+  filter(is.na(region) == FALSE) %>%
+  select(year, region, rate) %>%
+  mutate(
+    region = ifelse(region == "North NonHayden", "North, Non-Hayden", region),
+    region = ifelse(region == "North Hayden", "North, Hayden", region)
+  ) %>%
+  pivot_wider(names_from = year, values_from = rate) %>%
+  mutate(`2018` = ifelse(is.na(`2018`) == TRUE, 0, `2018`)) %>%
+  mutate(
+    `2017` = round(`2017`, digits = 2),
+    `2018` = round(`2018`, digits = 2),
+    `2019` = round(`2019`, digits = 2)
+  ) %>%
+  mutate(
+    `2018` = cell_spec(`2018`, "latex", color = ifelse(`2018` > `2017`, "red", "black"),
+                            bold = ifelse(`2018` > `2017`, TRUE, FALSE)),
+    `2019` = cell_spec(`2019`, "latex", color = ifelse(`2019` > `2017`, "red", "black"),
+                            bold = ifelse(`2019` > `2017`, TRUE, FALSE))
+  ) %>%
+  rename(
+    Region = region,
+  ) %>%
+  knitr::kable(caption = "Changes in Regional Violent Crime (per 1,000 residents)",
+               align = c("l", "r", "r", "r"), linesep = "",
+               format = "latex", booktabs = TRUE, escape = FALSE) %>%
+  row_spec(0, bold = TRUE) %>%
+  kable_styling(latex_options = "hold_position", full_width = TRUE) %>%
+  footnote(alphabet = c("Data for each year cover the January 1 through September 30 period.", 
+                        "Red values represent increases from 2017."))
+```
+
+```{r city-violent-change, echo=FALSE}
+city %>%
+  filter(range == "partial" & type == "violent") %>%
+  mutate(region = "City of St. Louis") %>%
+  select(year, region, rate) %>%
+  pivot_wider(names_from = year, values_from = rate) %>%
+  rename(
+    ` ` = region,
+  ) %>%
+  knitr::kable(caption = "Changes in City-wide Violent Crime Rates (per 1,000 residents)",
+               digits = 2, format = "latex", booktabs = TRUE) %>%
+  row_spec(0, bold = TRUE) %>%
+  kable_styling(latex_options = "hold_position", full_width = TRUE) %>%
+  footnote(alphabet = c("Data for each year cover the January 1 through September 30 period."))
+```
+
+**See next page for a visual summary of changes in Hayden's Rectangle and North St. Louis.**
+
+```{r, plot-violent, echo = FALSE}
+bind_rows(region, city) %>%
+  filter(range == "partial" & type == "violent") %>%
+  filter(region %in% c("North Hayden", "North NonHayden", "City of St. Louis")) %>%
+  mutate(region = case_when(
+    region == "North Hayden" ~ "North, Hayden",
+    region == "North NonHayden" ~ "North, Non-Hayden",
+    region == "City of St. Louis" ~ "City of St. Louis"
+  )) %>%
+  ggplot(mapping = aes(fill=as.character(year), y = rate, x = region)) + 
+    geom_bar(position="dodge", stat="identity") +
+    scale_y_continuous(limits=c(0, 30), breaks = seq(0, 30, 5)) +
+    scale_fill_brewer(palette = "Set1", name = "Year") +
+    labs(
+      title = "Violent Crimes, Rate per 1000 Residents",
+      subtitle = "January-September only",
+      x = "",
+      y = "Homicide Rate"
+    ) +
+    cp_sequoiaTheme(background = "white", base_size = 12, legend_size = .5) +
+    theme(axis.text.x=element_text(angle=10, hjust=1))
+```
+
+\newpage
+### Part 1 Crimes
+Part 1 crimes, which include both violent crimes and crimes against property (burglaries, larceny, larceny of a motor vehicle, and arson), also dropped in the first nine months of 2018 in Hayden's Rectangle (`r paste0(round(abs((75.23-77.23)/77.23)*100, digits = 2), "%")` from 77.23 crimes per 1,000 to 75.23). However, in first nine months 2019, the violent crime rate was up and above its 2017 levels (`r paste0(round(abs((82.25-77.23)/77.23)*100, digits = 2), "%")` from 77.23 crimes per 1,000 to 82.25). These rises come despite the Part 1 crime rate falling city-wide.
+
+Critically, as with violent crime rates, the Part 1 crime rate is also up in the Midtown region of neighborhoods. As before, this rise could be indicative of the "displacement" of crime into adjacent neighborhoods like Grand Center. 
+
+```{r, regional-p1-change, echo=FALSE}
+region %>%
+  filter(range == "partial" & type == "part 1") %>%
+  filter(is.na(region) == FALSE) %>%
+  select(year, region, rate) %>%
+  mutate(
+    region = ifelse(region == "North NonHayden", "North, Non-Hayden", region),
+    region = ifelse(region == "North Hayden", "North, Hayden", region)
+  ) %>%
+  pivot_wider(names_from = year, values_from = rate) %>%
+  mutate(`2018` = ifelse(is.na(`2018`) == TRUE, 0, `2018`)) %>%
+  mutate(
+    `2017` = round(`2017`, digits = 2),
+    `2018` = round(`2018`, digits = 2),
+    `2019` = round(`2019`, digits = 2)
+  ) %>%
+  mutate(
+    `2018` = cell_spec(`2018`, "latex", color = ifelse(`2018` > `2017`, "red", "black"),
+                            bold = ifelse(`2018` > `2017`, TRUE, FALSE)),
+    `2019` = cell_spec(`2019`, "latex", color = ifelse(`2019` > `2017`, "red", "black"),
+                            bold = ifelse(`2019` > `2017`, TRUE, FALSE))
+  ) %>%
+  rename(
+    Region = region,
+  ) %>%
+  knitr::kable(caption = "Changes in Regional Part 1 Crime (per 1,000 residents)",
+               align = c("l", "r", "r", "r"), linesep = "",
+               format = "latex", booktabs = TRUE, escape = FALSE) %>%
+  row_spec(0, bold = TRUE) %>%
+  kable_styling(latex_options = "hold_position", full_width = TRUE) %>%
+  footnote(alphabet = c("Data for each year cover the January 1 through September 30 period.", 
+                        "Red values represent increases from 2017."))
+```
+
+```{r city-p1-change, echo=FALSE}
+city %>%
+  filter(range == "partial" & type == "part 1") %>%
+  mutate(region = "City of St. Louis") %>%
+  select(year, region, rate) %>%
+  pivot_wider(names_from = year, values_from = rate) %>%
+  rename(
+    ` ` = region,
+  ) %>%
+  knitr::kable(caption = "Changes in City-wide Part 1 Crime Rates (per 1,000 residents)",
+               digits = 2, format = "latex", booktabs = TRUE) %>%
+  row_spec(0, bold = TRUE) %>%
+  kable_styling(latex_options = "hold_position", full_width = TRUE) %>%
+  footnote(alphabet = c("Data for each year cover the January 1 through September 30 period."))
+```
+
+**See next page for a visual summary of changes in Hayden's Rectangle and North St. Louis.**
+
+```{r, plot-p1, echo = FALSE}
+bind_rows(region, city) %>%
+  filter(range == "partial" & type == "part 1") %>%
+  filter(region %in% c("North Hayden", "North NonHayden", "City of St. Louis")) %>%
+  mutate(region = case_when(
+    region == "North Hayden" ~ "North, Hayden",
+    region == "North NonHayden" ~ "North, Non-Hayden",
+    region == "City of St. Louis" ~ "City of St. Louis"
+  )) %>%
+  ggplot(mapping = aes(fill=as.character(year), y = rate, x = region)) + 
+    geom_bar(position="dodge", stat="identity")  +
+    scale_y_continuous(limits=c(0, 90), breaks = seq(0, 90, 10)) +
+    scale_fill_brewer(palette = "Set1", name = "Year") +
+    labs(
+      title = "Part 1 Crimes, Rate per 1000 Residents",
+      subtitle = "January-September only",
+      x = "",
+      y = "Homicide Rate"
+    ) +
+    cp_sequoiaTheme(background = "white", base_size = 12, legend_size = .5) +
+    theme(axis.text.x=element_text(angle=10, hjust=1))
+```
+
+## Discussion
+These data suggest that, despite increased police presence in Hayden's Rectangle and short-term gains during 2018, there have not been long-term decreases in homicides, violent crimes, and Part 1 crimes. This does not *prove* that "hotspot" policing is ineffective, but they do raise questions about how SLMPD is implementing it in St. Louis. Likewise, the increase in the homicide rate in the Southeast region over the first nine months of 2019 despite "hotspot" policing in Dutchtown similarly raises questions about just how effective SLMPD's approach is.
+
+The observations about potential displacement of violent and Part 1 crime into the Midtown region are similarly not conclusive. These may be patterns wholly separate from what is occurring just to the north of this area. However, given the durability of these increases in the first nine months of 2018 and 2019, this again raises questions about the long-term consequences of "hotspot" policing in St. Louis.
+
+## Conclusion
+This white paper has two central findings. First, the stated justification for "hotspot" policing in Hayden's Rectangle, that two-thirds of violent crime occurred there in 2017, cannot be replicated using SLMPD's own data. Approximately twenty percent of violent crime occurred in that region of the city in 2017, along with approximately a third of homicides. For both homicides and violent crimes, a larger proportion of the city's crimes occurred in North City but *outside* of Hayden's Rectangle.
+
+Second, there are questions about the long-term effectiveness of "hotspot" policing in Hayden's Rectangle. The homicide and violent crime rates declined in the first nine months of 2018 relative to 2017, but have increased in the first nine months of 2019 enough to raise these rates *above* their 2017 levels. 

@@ -1,0 +1,397 @@
+---
+title: "Neighborhood Crime Rate Plots, 2017 through 2019"
+author: "Christopher Prener, Ph.D."
+date: '(`r format(Sys.time(), "%B %d, %Y")`)'
+output: 
+  github_document: default
+  html_notebook: default 
+---
+
+## Introduction
+This notebook creates a set of plots documenting changes in neighborhood level crime rates in St. Louis.
+
+## Dependencies
+This notebook requires the following `R` packages:
+
+```{r load-packages, message=FALSE}
+# tidyverse packages
+library(dplyr)
+library(ggplot2)
+library(readr)
+
+# other packages
+library(here)
+```
+
+In addition, a custom plot theme is also loaded from `source/`:
+
+```{r load-functions}
+source(here("source", "cp_sequoiaTheme.R"))
+```
+
+## Load Data
+We'll need the four data tables in `data/`:
+
+```{r load-data, results='hide'}
+city_wide <- read_csv(file = here("data", "city_wide.csv"))
+homicide <- read_csv(file = here("data", "homicide.csv"))
+part1 <- read_csv(file = here("data", "part1.csv"))
+violent <- read_csv(file = here("data", "violent.csv"))
+```
+
+## Additional Data Cleaning
+There are a few additional data cleaning steps to prepare our tables for plotting.
+
+### Add County-Level Data
+The county-level data are stored in a separate table (following tidy data principles), but we want them to appear as a separate line in our bar plots. We'll create individual tibbles to bind to the bottom of our neighborhood crime obects. Fist, crime:
+
+```{r homicide-cleaning}
+# create city-level tibble
+city <- tibble(
+  NHD_NUM = c(100),
+  NHD_NAME = c("City of St. Louis"),
+  total_pop = city_wide$total_pop[1],
+  count_h_18 = city_wide$homicide_count[1],
+  rate_h_18 = city_wide$homicide_rate[1],
+  count_h_18p = city_wide$homicide_count[2],
+  rate_h_18p = city_wide$homicide_rate[2],
+  count_h_19p = city_wide$homicide_count[3],
+  rate_h_19p = city_wide$homicide_rate[3],
+  ab_change = city_wide$homicide_count[3]-city_wide$homicide_count[2]
+)
+
+# bind rows
+homicide <- bind_rows(homicide, city)
+```
+
+Next, we'll clean the violent crime data in a similar fashion:
+
+```{r violent-cleaning}
+# create city-level tibble
+city <- tibble(
+  NHD_NUM = c(100),
+  NHD_NAME = c("City of St. Louis"),
+  total_pop = city_wide$total_pop[1],
+  count_v_18 = city_wide$violent_count[1],
+  rate_v_18 = city_wide$violent_rate[1],
+  count_v_18p = city_wide$violent_count[2],
+  rate_v_18p = city_wide$violent_rate[2],
+  count_v_19p = city_wide$violent_count[3],
+  rate_v_19p = city_wide$violent_rate[3],
+  pct_change = (city_wide$violent_rate[3]-city_wide$violent_rate[2])/city_wide$violent_rate[2]*100
+)
+
+# bind rows
+violent <- bind_rows(violent, city)
+```
+
+Finally, we'll clean the part 1 crime data:
+
+```{r part-1-cleaning}
+# create city-level tibble
+city <- tibble(
+  NHD_NUM = 100,
+  NHD_NAME = "City of St. Louis",
+  total_pop = city_wide$total_pop[1],
+  count_p1_18 = city_wide$p1_count[1],
+  rate_p1_18 = city_wide$p1_rate[1],
+  count_p1_18p = city_wide$p1_count[2],
+  rate_p1_18p = city_wide$p1_rate[2],
+  count_p1_19p = city_wide$p1_count[3],
+  rate_p1_19p = city_wide$p1_rate[3],
+  pct_change = (city_wide$p1_rate[3]-city_wide$p1_rate[2])/city_wide$p1_rate[2]*100
+)
+
+# bind rows
+part1 <- bind_rows(part1, city)
+```
+
+### Add Highlighting Indicators
+We want to highlight the four "SLU" neighborhoods in addition to highlighting the City of St. Louis bar:
+
+```{r highlight}
+homicide %>%
+  mutate(highlight = "a") %>%
+  mutate(highlight = ifelse(NHD_NAME == "City of St. Louis", "c", highlight)) -> homicide
+
+violent %>%
+  mutate(highlight = "a") %>%
+  mutate(highlight = ifelse(NHD_NAME == "City of St. Louis", "c", highlight)) -> violent
+
+part1 %>%
+  mutate(highlight = "a") %>%
+  mutate(highlight = ifelse(NHD_NAME == "City of St. Louis", "c", highlight)) -> part1
+```
+
+### Remove City Tables
+These are no longer needed:
+
+```{r clean-up}
+rm(city, city_wide)
+```
+
+## 2018 Full Year Plots
+First, we'll create a series of plots just for the full 2018 data.
+
+### Homicide
+
+```{r homicide-2018-full}
+ggplot(data = homicide, mapping = aes(x = reorder(NHD_NAME, rate_h_18), y = rate_h_18)) +
+  geom_bar(stat = "identity", aes(fill = highlight)) + 
+  scale_y_continuous(limits=c(0, 6), breaks = seq(0, 6, .5)) +
+  coord_flip() +
+  scale_fill_manual(values = c("#66C2A5", "#8DA0CB")) +
+  labs(
+    title = "Homicides, Rate per 1000 Residents",
+    subtitle = "St. Louis, MO (2018)",
+    x = "",
+    y = "Homicide Rate",
+    caption = "Data via SLMPD and U.S. Census Bureau (2013-2017 5-year American Community Survey)\nNeighborhoods with no bars have a homicide rate of '0'\nPlot by Christopher Prener, Ph.D."
+  ) +
+  cp_sequoiaTheme(background = "white", base_size = 16) +
+  theme(
+    legend.position = ""
+  )
+
+ggsave(here("results", "homicide_18_full.png"), dpi = 500, height = 16, width = 12, units = "in")
+```
+
+### Violent Crime
+
+```{r violent-2018-full}
+ggplot(data = violent, mapping = aes(x = reorder(NHD_NAME, rate_v_18), y = rate_v_18)) +
+  geom_bar(stat = "identity", aes(fill = highlight)) + 
+  scale_y_continuous(limits=c(0, 100), breaks = seq(0, 100, 10)) +
+  coord_flip() +
+  scale_fill_manual(values = c("#66C2A5", "#8DA0CB")) +
+  labs(
+    title = "Violent Crimes, Rate per 1000 Residents",
+    subtitle = "St. Louis, MO (2018)",
+    x = "",
+    y = "Violent Crime Rate",
+    caption = "Data via SLMPD and U.S. Census Bureau (2013-2017 5-year American Community Survey)\nViolent crimes include homicides, rapes, aggrevated assaults, and robberies\nPlot by Christopher Prener, Ph.D."
+  ) +
+  cp_sequoiaTheme(background = "white", base_size = 16) +
+  theme(
+    legend.position = ""
+  )
+
+ggsave(here("results", "violent_18_full.png"), dpi = 500, height = 16, width = 12, units = "in")
+```
+
+### Part 1 Crime
+
+```{r part-1-2018-full}
+ggplot(data = part1, mapping = aes(x = reorder(NHD_NAME, rate_p1_18), y = rate_p1_18)) +
+  geom_bar(stat = "identity", aes(fill = highlight)) + 
+  scale_y_continuous(limits=c(0, 300), breaks = seq(0, 300, 50)) +
+  coord_flip() +
+  scale_fill_manual(values = c("#66C2A5", "#8DA0CB")) +
+  labs(
+    title = "Part 1 Crimes, Rate per 1000 Residents",
+    subtitle = "St. Louis, MO (2018)",
+    x = "",
+    y = "Part 1 Crime Rate",
+    caption = "Data via SLMPD and U.S. Census Bureau (2013-2017 5-year American Community Survey)\nPart 1 crimes include violent crimes (homicides, rapes, aggrevated assaults, and robberies) as well as crimes \n  against property (burlary, larceny, larceny of a vehicle, arson)\nPlot by Christopher Prener, Ph.D."
+  ) +
+  cp_sequoiaTheme(background = "white", base_size = 16) +
+  theme(
+    legend.position = ""
+  )
+
+ggsave(here("results", "part1_18_full.png"), dpi = 500, height = 16, width = 12, units = "in")
+```
+
+## 2018 Partial Year Plots
+
+### Homicide
+
+```{r homicide-2018-partial}
+ggplot(data = homicide, mapping = aes(x = reorder(NHD_NAME, rate_h_18p), y = rate_h_18p)) +
+  geom_bar(stat = "identity", aes(fill = highlight)) + 
+  scale_y_continuous(limits=c(0, 6), breaks = seq(0, 6, .5)) +
+  coord_flip() +
+  scale_fill_manual(values = c("#66C2A5", "#8DA0CB")) +
+  labs(
+    title = "Homicides, Rate per 1000 Residents",
+    subtitle = "St. Louis, MO (January through August, 2018)",
+    x = "",
+    y = "Homicide Rate",
+    caption = "Data via SLMPD and U.S. Census Bureau (2013-2017 5-year American Community Survey)\nPlot by Christopher Prener, Ph.D."
+  ) +
+  cp_sequoiaTheme(background = "white", base_size = 16) +
+  theme(
+    legend.position = ""
+  )
+
+ggsave(here("results", "homicide_18_partial.png"), dpi = 500, height = 16, width = 12, units = "in")
+```
+
+### Violent Crime
+
+```{r violent-2018-partial}
+ggplot(data = violent, mapping = aes(x = reorder(NHD_NAME, rate_v_18p), y = rate_v_18p)) +
+  geom_bar(stat = "identity", aes(fill = highlight)) + 
+  scale_y_continuous(limits=c(0, 80), breaks = seq(0, 80, 10)) +
+  coord_flip() +
+  scale_fill_manual(values = c("#66C2A5", "#8DA0CB")) +
+  labs(
+    title = "Violent Crimes, Rate per 1000 Residents",
+    subtitle = "St. Louis, MO (January through August, 2018)",
+    x = "",
+    y = "Violent Crime Rate",
+    caption = "Data via SLMPD and U.S. Census Bureau (2013-2017 5-year American Community Survey)\nViolent crimes include homicides, rapes, aggrevated assaults, and robberies\nPlot by Christopher Prener, Ph.D."
+  ) +
+  cp_sequoiaTheme(background = "white", base_size = 16) +
+  theme(
+    legend.position = ""
+  )
+
+ggsave(here("results", "violent_18_partial.png"), dpi = 500, height = 16, width = 12, units = "in")
+```
+
+### Part 1 Crime
+
+```{r part-1-2018-partial}
+ggplot(data = part1, mapping = aes(x = reorder(NHD_NAME, rate_p1_18p), y = rate_p1_18p)) +
+  geom_bar(stat = "identity", aes(fill = highlight)) + 
+  scale_y_continuous(limits=c(0, 200), breaks = seq(0, 200, 25)) +
+  coord_flip() +
+  scale_fill_manual(values = c("#66C2A5", "#8DA0CB")) +
+  labs(
+    title = "Part 1 Crimes, Rate per 1000 Residents",
+    subtitle = "St. Louis, MO (January through August, 2018)",
+    x = "",
+    y = "Part 1 Crime Rate",
+  caption = "Data via SLMPD and U.S. Census Bureau (2013-2017 5-year American Community Survey)\nPart 1 crimes include violent crimes (homicides, rapes, aggrevated assaults, and robberies) as well as crimes \n  against property (burlary, larceny, larceny of a vehicle, arson)\nPlot by Christopher Prener, Ph.D."
+  ) +
+  cp_sequoiaTheme(background = "white", base_size = 16) +
+  theme(
+    legend.position = ""
+  )
+
+ggsave(here("results", "part1_18_partial.png"), dpi = 500, height = 16, width = 12, units = "in")
+```
+
+## 2019 Partial Year Plots
+
+### Homicide
+
+```{r homicide-2019-partial}
+ggplot(data = homicide, mapping = aes(x = reorder(NHD_NAME, rate_h_19p), y = rate_h_19p)) +
+  geom_bar(stat = "identity", aes(fill = highlight)) + 
+  scale_y_continuous(limits=c(0, 6), breaks = seq(0, 6, .5)) +
+  coord_flip() +
+  scale_fill_manual(values = c("#66C2A5", "#8DA0CB")) +
+  labs(
+    title = "Homicides, Rate per 1000 Residents",
+    subtitle = "St. Louis, MO (January through August, 2019)",
+    x = "",
+    y = "Homicide Rate",
+    caption = "Data via SLMPD and U.S. Census Bureau (2013-2017 5-year American Community Survey)\nPlot by Christopher Prener, Ph.D."
+  ) +
+  cp_sequoiaTheme(background = "white", base_size = 16) +
+  theme(
+    legend.position = ""
+  )
+
+ggsave(here("results", "homicide_19_partial.png"), dpi = 500, height = 16, width = 12, units = "in")
+```
+
+### Violent Crime
+
+```{r violent-2019-partial}
+ggplot(data = violent, mapping = aes(x = reorder(NHD_NAME, rate_v_19p), y = rate_v_19p)) +
+  geom_bar(stat = "identity", aes(fill = highlight)) + 
+  scale_y_continuous(limits=c(0, 80), breaks = seq(0, 80, 10)) +
+  coord_flip() +
+  scale_fill_manual(values = c("#66C2A5", "#8DA0CB")) +
+  labs(
+    title = "Violent Crimes, Rate per 1000 Residents",
+    subtitle = "St. Louis, MO (January through August, 2019)",
+    x = "",
+    y = "Violent Crime Rate",
+    caption = "Data via SLMPD and U.S. Census Bureau (2013-2017 5-year American Community Survey)\nViolent crimes include homicides, rapes, aggrevated assaults, and robberies\nPlot by Christopher Prener, Ph.D."
+  ) +
+  cp_sequoiaTheme(background = "white", base_size = 16) +
+  theme(
+    legend.position = ""
+  )
+
+ggsave(here("results", "violent_19_partial.png"), dpi = 500, height = 16, width = 12, units = "in")
+```
+
+### Part 1 Crime
+
+```{r part-1-2019-partial}
+ggplot(data = part1, mapping = aes(x = reorder(NHD_NAME, rate_p1_19p), y = rate_p1_19p)) +
+  geom_bar(stat = "identity", aes(fill = highlight)) + 
+  scale_y_continuous(limits=c(0, 200), breaks = seq(0, 200, 25)) +
+  coord_flip() +
+  scale_fill_manual(values = c("#66C2A5", "#8DA0CB")) +
+  labs(
+    title = "Part 1 Crimes, Rate per 1000 Residents",
+    subtitle = "St. Louis, MO (January through August, 2019)",
+    x = "",
+    y = "Part 1 Crime Rate",
+  caption = "Data via SLMPD and U.S. Census Bureau (2013-2017 5-year American Community Survey)\nPart 1 crimes include violent crimes (homicides, rapes, aggrevated assaults, and robberies) as well as crimes \n  against property (burlary, larceny, larceny of a vehicle, arson)\nPlot by Christopher Prener, Ph.D."
+  ) +
+  cp_sequoiaTheme(background = "white", base_size = 16) +
+  theme(
+    legend.position = ""
+  )
+
+ggsave(here("results", "part1_19_partial.png"), dpi = 500, height = 16, width = 12, units = "in")
+```
+
+## Change from 2018 to 2019
+
+### Violent Crime
+
+```{r violent-pct-change}
+violent %>%
+  filter(NHD_NUM != 40) %>%
+  filter(NHD_NUM != 45) %>%
+  ggplot(data = ., mapping = aes(x = reorder(NHD_NAME, pct_change), y = pct_change)) +
+    geom_bar(stat = "identity", aes(fill = highlight)) + 
+    scale_y_continuous(limits=c(-80, 120), breaks = seq(-80, 120, 20)) +
+    coord_flip() +
+    scale_fill_manual(values = c("#66C2A5", "#8DA0CB")) +
+    labs(
+      title = "Percent Change in Violent Crime Rates per 1000 Residents",
+      subtitle = "St. Louis, MO (January through August, 2018 to 2019)",
+      x = "",
+      y = "Percent Change",
+      caption = "Data via SLMPD and U.S. Census Bureau (2013-2017 5-year American Community Survey)\nViolent crimes include homicides, rapes, aggrevated assaults, and robberies\nWydown Skinker and Kings Oak removed due 0 violent crimes in 2018 or 2019\nPlot by Christopher Prener, Ph.D."
+    ) +
+    cp_sequoiaTheme(background = "white", base_size = 16) +
+    theme(
+      legend.position = ""
+    )
+
+ggsave(here("results", "violent_pctChange_partial.png"), dpi = 500, height = 16, width = 20, units = "in")
+```
+
+### Part 1 Crime
+
+```{r part-1-pct-change}
+part1 %>%
+  ggplot(data = ., mapping = aes(x = reorder(NHD_NAME, pct_change), y = pct_change)) +
+    geom_bar(stat = "identity", aes(fill = highlight)) + 
+    scale_y_continuous(limits=c(-60, 60), breaks = seq(-60, 60, 20)) +
+    coord_flip() +
+    scale_fill_manual(values = c("#66C2A5", "#8DA0CB")) +
+    labs(
+      title = "Percent Change in Part 1 Crime Rates per 1000 Residents",
+      subtitle = "St. Louis, MO (January through August, 2018 to 2019)",
+      x = "",
+      y = "Percent Change",
+    caption = "Data via SLMPD and U.S. Census Bureau (2013-2017 5-year American Community Survey)\nPart 1 crimes include violent crimes (homicides, rapes, aggrevated assaults, and robberies) as well as crimes against property (burlary, larceny, larceny of a vehicle, arson)\nPlot by Christopher Prener, Ph.D."
+    ) +
+    cp_sequoiaTheme(background = "white", base_size = 16) +
+    theme(
+      legend.position = ""
+    )
+
+ggsave(here("results", "part1_pctChange_partial.png"), dpi = 500, height = 16, width = 20, units = "in")
+```

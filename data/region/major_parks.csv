@@ -1,0 +1,87 @@
+year,range,type,nhd_num,count
+2017,full,homicide,86,2
+2017,full,part 1,80,9
+2017,full,part 1,81,20
+2017,full,part 1,82,167
+2017,full,part 1,83,16
+2017,full,part 1,84,5
+2017,full,part 1,85,16
+2017,full,part 1,86,10
+2017,full,part 1,87,3
+2017,full,part 1,88,18
+2017,full,violent,80,2
+2017,full,violent,81,4
+2017,full,violent,82,11
+2017,full,violent,83,6
+2017,full,violent,84,2
+2017,full,violent,85,8
+2017,full,violent,86,7
+2017,full,violent,88,4
+2017,partial,homicide,86,2
+2017,partial,part 1,80,5
+2017,partial,part 1,81,17
+2017,partial,part 1,82,116
+2017,partial,part 1,83,11
+2017,partial,part 1,84,3
+2017,partial,part 1,85,13
+2017,partial,part 1,86,9
+2017,partial,part 1,87,3
+2017,partial,part 1,88,13
+2017,partial,violent,80,1
+2017,partial,violent,81,1
+2017,partial,violent,82,7
+2017,partial,violent,83,4
+2017,partial,violent,84,2
+2017,partial,violent,85,8
+2017,partial,violent,86,6
+2017,partial,violent,88,3
+2018,full,part 1,80,7
+2018,full,part 1,81,12
+2018,full,part 1,82,133
+2018,full,part 1,83,28
+2018,full,part 1,84,9
+2018,full,part 1,85,25
+2018,full,part 1,86,9
+2018,full,part 1,87,4
+2018,full,part 1,88,28
+2018,full,violent,80,2
+2018,full,violent,81,3
+2018,full,violent,82,5
+2018,full,violent,83,18
+2018,full,violent,84,6
+2018,full,violent,85,15
+2018,full,violent,86,6
+2018,partial,part 1,80,6
+2018,partial,part 1,81,10
+2018,partial,part 1,82,110
+2018,partial,part 1,83,20
+2018,partial,part 1,84,9
+2018,partial,part 1,85,22
+2018,partial,part 1,86,6
+2018,partial,part 1,87,3
+2018,partial,part 1,88,23
+2018,partial,violent,80,2
+2018,partial,violent,81,2
+2018,partial,violent,82,4
+2018,partial,violent,83,11
+2018,partial,violent,84,6
+2018,partial,violent,85,14
+2018,partial,violent,86,4
+2019,partial,homicide,83,1
+2019,partial,part 1,80,5
+2019,partial,part 1,81,7
+2019,partial,part 1,82,116
+2019,partial,part 1,83,9
+2019,partial,part 1,84,6
+2019,partial,part 1,85,19
+2019,partial,part 1,86,8
+2019,partial,part 1,87,1
+2019,partial,part 1,88,7
+2019,partial,violent,80,1
+2019,partial,violent,81,1
+2019,partial,violent,82,3
+2019,partial,violent,83,2
+2019,partial,violent,84,4
+2019,partial,violent,85,6
+2019,partial,violent,86,6
+2019,partial,violent,88,1

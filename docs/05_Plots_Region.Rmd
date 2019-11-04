@@ -1,0 +1,131 @@
+---
+title: "Regional Crime Plots, 2017-2019"
+author: "Christopher Prener, Ph.D."
+date: '(`r format(Sys.time(), "%B %d, %Y")`)'
+output: 
+  github_document: default
+  html_notebook: default 
+---
+
+## Introduction
+This notebook creates plots evaluating change in crime between Hayden's Rectangle and other areas of the city.
+
+## Dependencies
+This notebook requires the following `R` packages:
+
+```{r load-packages, message=FALSE}
+# tidyverse packages
+library(dplyr)
+library(ggplot2)
+library(readr)
+
+# other packages
+library(here)
+```
+
+In addition, a custom plot theme is also loaded from `source/`:
+
+```{r load-functions}
+source(here("source", "cp_sequoiaTheme.R"))
+```
+
+## Load Data
+
+```{r load-data}
+city <- read_csv(here("data", "city", "city_wide.csv")) %>%
+  mutate(region = "City of St. Louis")
+region <- read_csv(here("data", "region", "region.csv"))
+```
+
+## Subset Data
+
+```{r}
+bind_rows(region, city) %>%
+  filter(range == "partial" & type == "homicide") %>%
+  filter(region %in% c("North Hayden", "North NonHayden", "City of St. Louis")) %>%
+  mutate(region = case_when(
+    region == "North Hayden" ~ "North City, Hayden",
+    region == "North NonHayden" ~ "North City, Non-Hayden",
+    region == "City of St. Louis" ~ "City of St. Louis"
+  )) -> homicides
+```
+
+```{r}
+bind_rows(region, city) %>%
+  filter(range == "partial" & type == "violent") %>%
+  filter(region %in% c("North Hayden", "North NonHayden", "City of St. Louis")) %>%
+  mutate(region = case_when(
+    region == "North Hayden" ~ "North City, Hayden",
+    region == "North NonHayden" ~ "North City, Non-Hayden",
+    region == "City of St. Louis" ~ "City of St. Louis"
+  )) -> violent
+```
+
+```{r}
+bind_rows(region, city) %>%
+  filter(range == "partial" & type == "part 1") %>%
+  filter(region %in% c("North Hayden", "North NonHayden", "City of St. Louis")) %>%
+  mutate(region = case_when(
+    region == "North Hayden" ~ "North City, Hayden",
+    region == "North NonHayden" ~ "North City, Non-Hayden",
+    region == "City of St. Louis" ~ "City of St. Louis"
+  )) -> part1
+```
+
+## Plot Data
+
+### Homicides
+
+```{r homicide-plot}
+plot <- ggplot(homicides, aes(fill=as.character(year), y=rate, x=region)) + 
+  geom_bar(position="dodge", stat="identity") +
+  scale_y_continuous(limits=c(0, 1.5), breaks = seq(0, 1.5, .25)) +
+  scale_fill_brewer(palette = "Set2", name = "Year") +
+  labs(
+    title = "Homicides, Rate per 1000 Residents",
+    subtitle = "St. Louis, MO (2017-2019, January-August)",
+    x = "",
+    y = "Homicide Rate",
+    caption = "Data via SLMPD and U.S. Census Bureau (2013-2017 5-year American \n Community Survey)\nPlot by Christopher Prener, Ph.D."
+  ) +
+  cp_sequoiaTheme(background = "white", base_size = 16) +
+  theme(axis.text.x=element_text(angle=20, hjust=1))
+
+ggsave(here("results", "hayden_homicides.png"), plot, dpi = 500, height = 8, width = 8, units = "in")
+```
+
+```{r violent-plot}
+plot <- ggplot(violent, aes(fill=as.character(year), y=rate, x=region)) + 
+  geom_bar(position="dodge", stat="identity") +
+  # scale_y_continuous(limits=c(0, 1.5), breaks = seq(0, 1.5, .25)) +
+  scale_fill_brewer(palette = "Set2", name = "Year") +
+  labs(
+    title = "Violent Crimes, Rate per 1000 Residents",
+    subtitle = "St. Louis, MO (2017-2019, January-August)",
+    x = "",
+    y = "Violent Crime Rate",
+    caption = "Data via SLMPD and U.S. Census Bureau (2013-2017 5-year American \n Community Survey)\nViolent crimes include homicides, rapes, aggrevated assaults, and robberies\nPlot by Christopher Prener, Ph.D."
+  ) +
+  cp_sequoiaTheme(background = "white", base_size = 16) +
+  theme(axis.text.x=element_text(angle=20, hjust=1))
+
+ggsave(here("results", "hayden_violent.png"), plot, dpi = 500, height = 8, width = 8, units = "in")
+```
+
+```{r part1-plot}
+plot <- ggplot(part1, aes(fill=as.character(year), y=rate, x=region)) + 
+  geom_bar(position="dodge", stat="identity") +
+  scale_y_continuous(limits=c(0, 75), breaks = seq(0, 75, 15)) +
+  scale_fill_brewer(palette = "Set2", name = "Year") +
+  labs(
+    title = "Part 1 Crimes, Rate per 1000 Residents",
+    subtitle = "St. Louis, MO (2017-2019, January-August)",
+    x = "",
+    y = "Part 1 Crime Rate",
+    caption = "Data via SLMPD and U.S. Census Bureau (2013-2017 5-year American \n Community Survey)\nPart 1 crimes include violent crimes (homicides, rapes, aggrevated assaults, \n and robberies) as well as crimes against property (burlary, larceny, larceny \n of a vehicle, arson)\nPlot by Christopher Prener, Ph.D."
+  ) +
+  cp_sequoiaTheme(background = "white", base_size = 16) +
+  theme(axis.text.x=element_text(angle=20, hjust=1))
+
+ggsave(here("results", "hayden_part1.png"), plot, dpi = 500, height = 8, width = 8, units = "in")
+```
