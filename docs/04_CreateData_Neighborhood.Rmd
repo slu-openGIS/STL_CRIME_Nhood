@@ -467,6 +467,6 @@ rm(nhood_crime)
 Now we can write our city-wide estimates:
 
 ```{r write-data}
-write_csv(nhood, path = here("data", "region", "neighborhoods.csv"))
-write_csv(majorPark_crime, path = here("data", "region", "major_parks.csv"))
+write_csv(nhood, path = here("data", "neighborhood", "neighborhoods.csv"))
+write_csv(majorPark_crime, path = here("data", "neighborhood", "major_parks.csv"))
 ```
