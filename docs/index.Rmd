@@ -51,7 +51,7 @@ st_geometry(nhood) <- NULL
 This is an experimental document for communicating crime data for St. Louis on a rolling basis. Check back often, as this will continue to evolve prior to its eventual publication this winter. If you'd like to leave feedback, you can [open an issue on GitHub](https://github.com/slu-openGIS/STL_CRIME_Nhood/issues/new) or [tweet at Chris](https://twitter.com/chrisprener).
 
 ## Neighborhood Homicide Rates
-The following table summarizes neighborhood crime rates for the January to September period of 2017, 2018, and 2019. Each rate is calculated per 1,000 residents. The darker the orange shading, the higher the rate relative to other neighborhoods. Percent change from 2018 to 2019 is also given for neighborhoods where it could be calculated (neighborhoods must have had at least one homicide in 2018). The table is sorted by 2019 homicide rates.
+The following table summarizes neighborhood homicide rates for the January to September period of 2017, 2018, and 2019. Each rate is calculated per 1,000 residents. The darker the orange shading, the higher the rate relative to other neighborhoods. Percent change from 2018 to 2019 is also given for neighborhoods where it could be calculated (neighborhoods must have had at least one homicide in 2018). The table is sorted by 2019 homicide rates.
 
 ```{r}
 customGreen0 = "#DeF7E9"
@@ -96,6 +96,54 @@ nhood_crime %>%
   ) %>%
   mutate(Change = stringr::str_replace(Change,
                                        pattern = as.character(change_val),
+                                       replacement = change_str)) %>%
+  mutate(
+    Change = ifelse(is.infinite(change_val) == TRUE, "", Change),
+    Change = ifelse(change_val == 0, "", Change),
+    Change = ifelse(is.na(change_val) == TRUE, "", Change)
+  ) %>%
+  select(-change_val, -change_str) %>%
+  rename(`% Change from 2018 to 2019` = Change) %>%
+  arrange(`2019`) %>%
+  knitr::kable(escape = FALSE) %>%
+  kable_styling(full_width = FALSE) %>%
+  scroll_box(width = "100%", height = "400px")
+```
+
+## Neighborhood Violent Crime Rates
+The following table summarizes neighborhood violent crime rates for the January to September period of 2017, 2018, and 2019. Each rate is calculated per 1,000 residents. The FBI's definition of violent crime is used, which includes homicides, rapes, aggrevated assaults, and robberies. The darker the orange shading, the higher the rate relative to other neighborhoods. Percent change from 2018 to 2019 is also given for neighborhoods. The table is sorted by 2019 violent crime rates.
+
+```{r}
+nhood_crime %>%
+  filter(range == "partial" & type == "violent") %>%
+  select(year, nhd_num, rate) %>%
+  pivot_wider(names_from = year, values_from = rate) %>%
+  left_join(nhood, ., by = c("NHD_NUM" = "nhd_num")) %>%
+  select(-NHD_NUM) %>%
+  rename(Neighborhood = NHD_NAME) %>%
+  arrange(Neighborhood) %>%
+  mutate(
+    `2017` = ifelse(is.na(`2017`) == TRUE, 0, `2017`),
+    `2018` = ifelse(is.na(`2018`) == TRUE, 0, `2018`),
+    `2019` = ifelse(is.na(`2019`) == TRUE, 0, `2019`)
+  ) %>%
+  mutate(Change = (`2019`-`2018`)/`2018`*100) %>%
+  mutate(
+    `2017` = round(`2017`, digits = 2),
+    `2018` = round(`2018`, digits = 2),
+    `2019` = round(`2019`, digits = 2),
+    Change = round(Change, digits = 0),
+    change_val = Change,
+    change_str = paste0(as.character(Change), "%")
+  )  %>%
+  mutate(Change = improvement_formatter(Change)) %>%
+  mutate(
+    `2017` = color_tile("white", "orange")(`2017`), 
+    `2018` = color_tile("white", "orange")(`2018`), 
+    `2019` = color_tile("white", "orange")(`2019`)
+  ) %>%
+  mutate(Change = stringr::str_replace(Change,
+                                       pattern = stringr::str_c(change_val,"\\b"),
                                        replacement = change_str)) %>%
   mutate(
     Change = ifelse(is.infinite(change_val) == TRUE, "", Change),
